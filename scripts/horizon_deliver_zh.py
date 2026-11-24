@@ -10,32 +10,12 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 DATA_DIR = Path.home() / "Horizon" / "data"
-MAX_CHARS = 12000
-
-
-def clean(text: str) -> str:
-    text = re.sub(r"<details>.*?</details>", "", text, flags=re.S)
-    text = re.sub(r'<a id="[^"]*"></a>', "", text)
-    text = re.sub(r"\[([^\]]+)\]\(#[^)]*\)", r"\1", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    # Hermes 把 MEDIA: 解析为本地附件指令，日报只发送正文。
-    return re.sub(r"MEDIA:", "MEDIA：", text, flags=re.I).strip()
-
-
-def truncate(text: str) -> str:
-    if len(text) <= MAX_CHARS:
-        return text
-    notice = "\n\n……（本期内容较长，已截断。完整版见 ~/Horizon/data/summaries/）"
-    limit = MAX_CHARS - len(notice)
-    cut = text.rfind("\n\n", 0, limit)
-    if cut <= 0:
-        cut = limit
-    return text[:cut] + notice
 
 
 def open_outbox(data_dir: Path) -> sqlite3.Connection:
@@ -48,6 +28,13 @@ def open_outbox(data_dir: Path) -> sqlite3.Connection:
         day TEXT NOT NULL, digest BLOB NOT NULL, body TEXT, message_id TEXT,
         UNIQUE (day, digest)
     )""")
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        columns = {row[1] for row in db.execute("PRAGMA table_info(editions)")}
+        if "phase" not in columns:
+            db.execute("ALTER TABLE editions ADD COLUMN phase TEXT NOT NULL DEFAULT 'legacy'")
+            db.execute("ALTER TABLE editions ADD COLUMN attachment TEXT")
+            db.execute("ALTER TABLE editions ADD COLUMN preview_route TEXT")
     return db
 
 
@@ -81,15 +68,56 @@ def capture(db: sqlite3.Connection, data_dir: Path, today: date) -> None:
             except FileNotFoundError:
                 pass
             else:
-                body = truncate(clean(raw.decode("utf-8")))
-                if body:
-                    db.execute("""INSERT INTO editions (day, digest, body) VALUES (?, ?, ?)
+                body = raw.decode("utf-8")
+                if re.sub(r"<details>.*?</details>", "", body, flags=re.S).strip():
+                    db.execute("""INSERT INTO editions (day, digest, body, phase) VALUES (?, ?, ?, 'raw')
                         ON CONFLICT(day, digest) DO NOTHING""",
                         (day.isoformat(), hashlib.sha256(raw).digest(), body))
             day += timedelta(days=1)
         # Horizon 确定文件名和写入完成之间可能跨过 UTC 零点。
         scan_from = max(first, today - timedelta(days=1))
         db.execute("UPDATE settings SET scan_from = ?", (scan_from.isoformat(),))
+
+
+def send_message(hermes: str, target: str, profile: str, message: str, day: str) -> dict:
+    try:
+        result = subprocess.run(
+            [hermes, "send", "--to", target, "--file", "-", "--json"],
+            input=message, capture_output=True, encoding="utf-8", timeout=90,
+            env={**os.environ, "HERMES_HOME": profile},
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f"{day} 等待发送回执超时，已保留待发正文") from exc
+    try:
+        receipt = json.loads(result.stdout)
+    except ValueError:
+        receipt = None
+    if not isinstance(receipt, dict):
+        raise ValueError(f"{day} 未取得 Hermes JSON 回执，退出码 {result.returncode}，已保留待发正文")
+    if (
+        result.returncode or receipt.get("success") is not True
+        or receipt.get("media_dropped") or receipt.get("skipped") or receipt.get("error") or receipt.get("partial_success")
+    ):
+        reason = receipt.get("error") or receipt.get("reason") or f"退出码 {result.returncode}"
+        raise ValueError(f"{day} 投递未确认，已保留待发正文。{reason}")
+    return receipt
+
+
+def prepare_edition(data_dir: Path, day: str, raw: str) -> tuple[str, str]:
+    root = data_dir.parent
+    editor = Path(__file__).resolve().with_name("horizon_edition.py")
+    try:
+        process = subprocess.run(
+            [root / ".venv/bin/python", editor, day], cwd=root, input=raw,
+            capture_output=True, encoding="utf-8", timeout=240, check=True,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f"{day} 编辑超时，原稿已入队，稍后重试") from exc
+    except subprocess.CalledProcessError as exc:
+        # 模型/API 的异常可能含请求信息，不把原始输出写入群消息或日志。
+        raise ValueError(f"{day} 编辑失败，原稿仍在队列中（退出码 {exc.returncode}）") from exc
+    result = json.loads(process.stdout)
+    return result["preview"], result["markdown"]
 
 
 def send_one(db: sqlite3.Connection, data_dir: Path) -> None:
@@ -99,35 +127,48 @@ def send_one(db: sqlite3.Connection, data_dir: Path) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        edition = db.execute("""SELECT rowid, day, body FROM editions
+        edition = db.execute("""SELECT rowid, day, digest, body, phase, attachment, preview_route FROM editions
             WHERE body IS NOT NULL ORDER BY rowid LIMIT 1""").fetchone()
         if edition is None:
             return
-        row_id, day, body = edition
+        row_id, day, digest, body, phase, attachment, preview_route = edition
         target, hermes, profile = db.execute("SELECT target, hermes, profile FROM settings").fetchone()
-        try:
-            result = subprocess.run(
-                [hermes, "send", "--to", target, "--file", "-", "--json"],
-                input=body, capture_output=True, encoding="utf-8", timeout=90,
-                env={**os.environ, "HERMES_HOME": profile},
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ValueError(f"{day} 等待发送回执超时，已保留待发正文") from exc
-        try:
-            receipt = json.loads(result.stdout)
-        except ValueError:
-            receipt = None
-        if not isinstance(receipt, dict):
-            raise ValueError(f"{day} 未取得 Hermes JSON 回执，退出码 {result.returncode}，已保留待发正文")
-        if (
-            result.returncode or receipt.get("success") is not True
-            or receipt.get("skipped") or receipt.get("error") or receipt.get("partial_success")
-        ):
-            reason = receipt.get("error") or receipt.get("reason") or f"退出码 {result.returncode}"
-            raise ValueError(f"{day} 投递未确认，已保留待发正文。{reason}")
+        if phase == "legacy":
+            # 旧脚本只保留过裁剪后的正文。仅当摘要相符时才用磁盘原稿恢复它。
+            original = data_dir / "summaries" / f"horizon-{day}-zh.md"
+            try:
+                raw = original.read_bytes()
+            except FileNotFoundError:
+                raw = None
+            if raw is not None and hashlib.sha256(raw).digest() == digest:
+                body = raw.decode("utf-8")
+        if phase in {"legacy", "raw"}:
+            body, attachment = prepare_edition(data_dir, day, body)
+            with db:
+                db.execute("UPDATE editions SET body=?, attachment=?, phase='preview' WHERE rowid=?",
+                           (body, attachment, row_id))
+            phase = "preview"
+        route = json.dumps([profile, target])
+        if phase == "preview" or (phase == "file" and preview_route != route):
+            # 只有下面由程序生成的本地路径可以作为 Hermes 附件指令。
+            preview = re.sub(r"MEDIA:", "MEDIA：", body, flags=re.I)
+            send_message(hermes, target, profile, preview, day)
+            with db:
+                db.execute("UPDATE editions SET phase='file', preview_route=? WHERE rowid=?", (route, row_id))
+        cache = Path(profile) / "cache/documents"
+        cache.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="horizon-", dir=cache) as folder:
+            path = Path(folder) / f"Horizon-{day}-{digest.hex()[:12]}.md"
+            path.write_text(attachment, encoding="utf-8")
+            # Hermes 支持加引号的绝对路径（包括空格）。
+            if any(c in str(path) for c in ('"', "\n", "\r")):
+                raise ValueError("Hermes 附件路径包含不支持的字符")
+            receipt = send_message(hermes, target, profile, f'MEDIA:"{path}"', day)
+            if receipt.get("warnings") or receipt.get("media_delivered") is False:
+                raise ValueError(f"{day} Markdown 附件投递未确认，将单独重试")
         with db:
-            db.execute("UPDATE editions SET body = NULL, message_id = ? WHERE rowid = ?",
-                       (receipt.get("message_id"), row_id))
+            db.execute("""UPDATE editions SET body=NULL, attachment=NULL, phase='done', message_id=?
+                          WHERE rowid=?""", (receipt.get("message_id"), row_id))
 
 
 def main() -> None:

@@ -7,7 +7,7 @@
 - 智谱示例使用 `provider: openai`、`base_url: https://open.bigmodel.cn/api/paas/v4`、`api_key_env: ZHIPU_API_KEY` 和模型 `glm-5.3-flash`。
 - 中文输出：`ai.languages: ["zh"]`。
 - 定时：北京 08:00 / 20:00 两期，`--hours 12` 窗口，`digest.max_items: 15`。
-- Hermes 飞书投递使用 `webhook.enabled: false` 和 `horizon_deliver_zh.py`。原生折叠卡片配置见下方「飞书机器人」。
+- Hermes 飞书投递使用 `webhook.enabled: false`。同目录安装 `horizon_deliver_zh.py` 和 `horizon_edition.py`，分别负责投递和编辑。原生折叠卡片配置见下方「飞书机器人」。
 - 定时器：systemd 用户级 `horizon-daily.timer`。
 
 ## 配置坑表
