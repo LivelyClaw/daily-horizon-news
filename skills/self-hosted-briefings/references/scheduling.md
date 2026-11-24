@@ -19,6 +19,8 @@ TimeoutStartSec=3600
 
 WorkingDirectory 必须是仓库根（.env 和相对路径都从它解析）。ExecStart 用 venv 内绝对路径，不依赖 shell/uv。
 
+选择 Hermes 投递时，按 [安装说明的飞书投递步骤](https://github.com/LivelyClaw/daily-horizon-news#3-配置飞书投递) 安装 `horizon-daily.service.d/hermes.conf` 和它引用的脚本。用 `systemctl --user cat horizon-daily.service` 确认包含带 `--enqueue-only` 的 `ExecStartPost`。它在下一期覆盖同名文件前保存正文，Hermes 离线时也能执行。
+
 `~/.config/systemd/user/<name>.timer`：
 
 ```ini
@@ -37,8 +39,8 @@ WantedBy=timers.target
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now <name>.timer
-systemctl --user list-timers <name>.timer --no-pager   # 看 NEXT 换算北京时间
+systemctl --user enable --now horizon-daily.timer
+systemctl --user list-timers horizon-daily.timer --no-pager   # 看 NEXT 换算北京时间
 loginctl show-user $USER -p Linger                     # 必须是 yes
 systemd-analyze calendar "*-*-* 00,12:00:00 UTC"       # 先验 OnCalendar 语法与下次触发
 ```
@@ -50,4 +52,4 @@ systemd-analyze calendar "*-*-* 00,12:00:00 UTC"       # 先验 OnCalendar 语�
 ## 坑
 
 - `systemctl --user start <oneshot>.service` **阻塞到流程结束**（简报全流程数分钟）：冒烟测试时要么接受阻塞并给足超时，要么直接查 `systemctl --user status` + `journalctl --user -u <unit>`。
-- 冒烟测试的预期要写清楚：key 未就绪时流程应走到 AI 阶段才报错（如 401），抓取阶段正常——这是「单元配置正确」的证据。
+- 有资讯时从日志核对抓取和模型处理阶段。所有源正常返回零条时，服务会在抓取后结束，此次运行只验证到抓取。

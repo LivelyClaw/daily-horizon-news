@@ -12,6 +12,8 @@
 /data/summaries/
 /data/mcp-runs/
 .delivery_state_zh.json
+.delivery_zh.sqlite3*
+.delivery_zh.lock
 *.log
 
 # 本地开发环境与缓存

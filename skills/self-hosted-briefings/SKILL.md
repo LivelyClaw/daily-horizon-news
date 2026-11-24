@@ -1,7 +1,7 @@
 ---
 name: self-hosted-briefings
 description: 部署、调整或排查 Horizon 中文新闻简报、systemd 定时生成和 Hermes 飞书投递。
-version: 0.1.0
+version: 0.2.0
 author: Ben Barclay (benbarclay), Hermes Agent
 license: MIT
 platforms: [linux]
@@ -26,8 +26,8 @@ Horizon 从多个来源采集资讯、筛选并生成中文日报。systemd 定�
 ## 铁律
 
 - **沿用已确认设置**。涉及部署位置、AI 提供商、内容方向、投递渠道和推送时间时，先核对现有设置及用户要求。对需要用户决定的缺项一次确认。全程中文回复。
-- **配置前读仓库文档**：schema 以仓库内 docs/configuration.md 和 config.example.json 为准，不凭记忆猜字段；本项目模型校验会拒绝缺字段和未知值，但默认值可能出乎意料（见 references/horizon.md 的坑表）。
-- **每步用项目自身机制验证**：配置用项目 loader 验证；抓取阶段单独测（不需要 AI key）；定时单元冒烟测试。不要以「命令退出码 0」当作成功。
+- **配置前读仓库文档**：配置字段以固定版本的 `docs/configuration.md` 和 `data/config.example.json` 为准。默认值见 references/horizon.md。
+- **每步用项目自身机制验证**：配置须通过加载和流程初始化，信息源单独做免密钥抓取，定时任务用实际运行日志验证。
 
 ## Procedure
 
@@ -41,11 +41,11 @@ Horizon 从多个来源采集资讯、筛选并生成中文日报。systemd 定�
 
 ### 3. 配置
 
-读 `docs/configuration.md` + `data/config.example.json`，写 `data/config.json` 和 `.env`（密钥模板）。改动后立即用项目 loader 验证（配方见 references/horizon.md）。`.env` 占位符规则见 Pitfalls。
+读 `docs/configuration.md` + `data/config.example.json`，写 `data/config.json` 和 `.env`（密钥模板）。改动后按 references/horizon.md 加载配置并初始化 Horizon，检查所有引用的 profile。`.env` 占位符规则见 Pitfalls。
 
 ### 4. 免密钥验证抓取
 
-AI key 没到位时也能测大半条链路：走 MCP 服务器调 `hz_fetch_items`，核对各源条数和状态（配方见 references/horizon.md）。某源持续失败就换等效源，不要反复调它。
+AI key 没到位时也能测大半条链路：走 MCP 服务器调 `hz_fetch_items`，核对各源条数和状态（配方见 references/horizon.md）。区分无更新和抓取失败，按返回的错误排查失败源。
 
 ### 5. 定时
 
@@ -53,32 +53,32 @@ AI key 没到位时也能测大半条链路：走 MCP 服务器调 `hz_fetch_ite
 
 ### 6. 冒烟测试定时单元
 
-key 未就绪时启动一次服务，**预期在 AI 阶段报错**——这验证的是路径、.env 加载、抓取链路。日志用 `journalctl --user -u <unit>`。
+启动一次服务，查看 `journalctl --user -u horizon-daily.service`。有资讯但缺模型密钥时，检查日志是否已完成抓取并进入 AI 阶段。窗口内所有源都正常返回零条时，Horizon 会提前结束，本次只验证到抓取。
 
 ### 7. 交付与收尾
 
-用户填好真实密钥后：手动跑一次完整流程，确认用户渠道里收到中文日报，才算完成。投递渠道二选一：
+按用户选定的渠道完成以下配置。填好真实密钥后，手动启动生成服务，在目标会话核对收到的中文日报。
 
-- **Horizon 自带 webhook**（飞书群自定义机器人）：webhook.enabled=true + .env 里填 HORIZON_WEBHOOK_URL，feishu collapsible 卡片体验最好。
-- **Hermes cron 投递**。将 `webhook.enabled` 设为 `false`。以 `--no-agent --script horizon_deliver_zh.py` 注册每 5 分钟运行的任务。脚本只输出当天新增或更新的简报，由 Hermes 投递到所选会话。脚本记录已输出的版本，实际投递结果在 Hermes 任务记录中查看。
+- **Horizon 飞书群机器人**。在 `webhook` 段设置 `enabled: true`、`url_env: HORIZON_WEBHOOK_URL`、`platform: feishu`、`layout: collapsible` 和 `languages: ["zh"]`，在 `.env` 填入同名 URL。切换渠道时暂停原 Hermes 投递任务并卸下其生成后入队配置。完整示例见 [飞书机器人](references/horizon.md#飞书机器人)。
+- **Hermes cron 投递**。将 `webhook.enabled` 设为 `false`。按安装说明配置飞书会话和 systemd 生成后入队步骤，复用或创建每 5 分钟运行的 `--no-agent` 任务，cron 结果目标为 `local`。脚本用 `hermes send` 发送最早的待发正文，收到成功回执才确认。
 
 ## Pitfalls
 
 - **配置文件模板的占位值必须 ASCII**（用 `PASTE_ZHIPU_API_KEY_HERE` 风格）：占位文字会被塞进 `Authorization` 请求头，HTTP 头只接受 latin-1，非 ASCII 会让每次 AI 调用在发出前就 UnicodeEncodeError，且报错藏在逐条重试里很难定位。
 - **从 execute_code 起子进程跑项目 venv 时传干净 env 字典**（只含 PATH/HOME/LANG）：内核会注入自己的 PYTHONPATH/VIRTUAL_ENV，子进程会 import 到错误解释器站包里的依赖，报莫名其妙的 ImportError/版本错。
-- **未配置 ≠ 未启用**：本项目 telegram/twitter/openbb 缺省 enabled=true，twitter 需要 Apify token、openbb 需要额外依赖，漏写显式 false 则每次运行都报错。对应通用规则：接手任何 schema 驱动的配置，先核对「省略字段」的默认行为。
+- 接手已有配置时，按 [数据源默认值](references/horizon.md#配置坑表) 区分省略整个源与仅省略源内的 `enabled`。
 - **`systemctl --user start` 对 oneshot 服务会阻塞到流程结束**（简报流程含抓取+AI，几分钟很正常）：冒烟测试要么加超时预期，要么查状态/日志代替阻塞等待。
 - **数据中心 IP 会被 Reddit 屏蔽**（RSS/JSON 端点一律 404）：本机是 VPS/机房 IP 时别调试 Reddit，直接换等效 RSS 源。
 - 抓取条数骤降先查时间窗口（`--hours`/`collection.time_window_hours`）再查源：GitHub release、周更博客在 12h 窗口为 0 条属正常，不是故障。
 - **paused 状态的 cron 任务无法被显式 run**（`execution_skipped: Job is paused/disabled`）——「暂停 + 事件触发」的设计走不通。
-- **Hermes cron 不接受永不触发的计划**：`0 3 31 2 *` 这类不存在的日期会让 resume 直接报 `failed to find next date`。要用脚本看门狗（`*/5 * * * *` + 输出空则不发）而不是扭曲计划时间。
+- **Hermes cron 不接受永不触发的计划**：`0 3 31 2 *` 这类不存在的日期会让 resume 直接报 `failed to find next date`。要用脚本看门狗（`*/5 * * * *` 轮询待发队列）而不是扭曲计划时间。
 - 配置推理模型（如 glm-5.3-flash）时 Horizon 不发任何 thinking/effort 参数，走 API 默认（开启思考）：80+ 条打分 + 富化单期 20–35 分钟、约 25 万 token 是正常水平，别当故障排查。
-- **调阈值先看 profile 评分细则的档位**：rubric 按整数带划分（7-8 高价值、5-6 有趣），模型实际只给整数分，落在档位之间的阈值（如 6.5）与上一档位边界（7.0）效果完全一样，是无效调整。有效阈值只能取档位边界：7.0 → 6.0 → 5.0。
+- 调阈值时对照实际分数。评分支持小数，Horizon 保留分数大于等于阈值的条目。例如 6.8 分的条目在阈值 6.5 时保留，调至 7.0 后过滤。
 
 ## Verification
 
-- [ ] config.json 通过项目 loader 验证（不是仅 JSON 合法）。
-- [ ] 免密钥抓取测试各源状态 success，总数与源配置规模相符。
+- [ ] 配置加载成功，Horizon 初始化识别了数据源和摘要引用的全部 profile。
+- [ ] 在 `data.fetch_report.sources` 核对预期启用的源。正常状态包括有内容的 `success` 和窗口内无更新的 `empty`。逐项处理 `partial_failure` 和 `failure`。
 - [ ] timer 下次触发时间 = 用户选的北京时间，Linger=yes，Persistent=true。
-- [ ] 定时单元冒烟测试走过的阶段符合预期（到 AI 阶段才停）。
+- [ ] 已用服务日志核对抓取、模型处理或空窗口退出的实际结果。
 - [ ] 完整跑通一次：用户渠道收到中文日报。
