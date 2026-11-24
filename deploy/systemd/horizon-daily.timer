@@ -1,0 +1,9 @@
+[Unit]
+Description=Horizon 日报定时触发（北京时间 08:00 / 20:00）
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

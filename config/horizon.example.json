@@ -1,0 +1,41 @@
+{
+  "ai": {
+    "provider": "openai",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "glm-5.3-flash",
+    "api_key_env": "ZHIPU_API_KEY",
+    "languages": ["zh"]
+  },
+  "sources": {
+    "hackernews": {
+      "enabled": true,
+      "fetch_top_stories": 30,
+      "min_score": 100
+    },
+    "rss": [
+      {
+        "name": "IT之家",
+        "url": "https://www.ithome.com/rss/"
+      },
+      {
+        "name": "阮一峰的网络日志",
+        "url": "https://www.ruanyifeng.com/blog/atom.xml",
+        "profile": "tech-blog"
+      },
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/"
+      }
+    ],
+    "reddit": {"enabled": false},
+    "telegram": {"enabled": false},
+    "twitter": {"enabled": false},
+    "openbb": {"enabled": false}
+  },
+  "collection": {"time_window_hours": 12},
+  "digest": {
+    "max_items": 15,
+    "profile_order": ["tech-news", "tech-blog"]
+  },
+  "webhook": {"enabled": false}
+}

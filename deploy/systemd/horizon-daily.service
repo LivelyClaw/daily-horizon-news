@@ -1,0 +1,8 @@
+[Unit]
+Description=Horizon 中文日报生成
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Horizon
+ExecStart=%h/Horizon/.venv/bin/horizon --hours 12
+TimeoutStartSec=3600
