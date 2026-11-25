@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import dataclass
 from html import unescape
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -87,11 +88,16 @@ async def editorial_plan(stories: list[Story]) -> dict:
     from src.storage.manager import StorageManager
 
     load_dotenv(Path.cwd() / ".env")
-    client = create_ai_client(StorageManager().load_config().ai)
+    ai = StorageManager().load_config().ai
+    max_tokens = int(os.environ.get("HORIZON_EDITION_MAX_TOKENS", ai.max_tokens))
+    if max_tokens <= 0:
+        raise ValueError("HORIZON_EDITION_MAX_TOKENS 必须是正整数")
+    client = create_ai_client(ai)
     candidates = [dict(id=i, title=s.title, lead=s.lead[:750], source=s.source, url=s.url)
                   for i, s in enumerate(stories, 1)]
-    response = await client.complete(system=SYSTEM_PROMPT, user=json.dumps(candidates, ensure_ascii=False))
-    plan = parse_json_response(response)
+    response = await client.complete(system=SYSTEM_PROMPT, user=json.dumps(candidates, ensure_ascii=False),
+                                     max_tokens=max_tokens)
+    plan = parse_json_response(response or "")
     if not isinstance(plan, dict):
         raise ValueError("事件归并没有返回 JSON 对象")
     return plan

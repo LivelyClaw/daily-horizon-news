@@ -1,5 +1,5 @@
 ---
-name: self-hosted-briefings
+name: daily-horizon-news
 description: 部署、调整或排查 Horizon 中文新闻简报、systemd 定时生成和 Hermes 飞书投递。
 version: 0.3.0
 author: Ben Barclay (benbarclay), Hermes Agent
@@ -11,7 +11,7 @@ metadata:
     related_skills: [product-price-monitor]
 ---
 
-# Self-Hosted Briefings（自托管每日简报）
+# Horizon 中文新闻日报
 
 Horizon 从多个来源采集资讯、筛选并生成中文日报。systemd 定时生成，Hermes 将日报发到飞书。配置数据源和模型时读 [Horizon 专项笔记](references/horizon.md)，安装或调整定时任务时读 [定时配置](references/scheduling.md)。
 

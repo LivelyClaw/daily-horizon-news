@@ -6,7 +6,7 @@
 
 | 位置 | 用途 |
 | --- | --- |
-| [skills/self-hosted-briefings/](skills/self-hosted-briefings/) | Hermes skill 和部署、排查笔记 |
+| [skills/news/daily-horizon-news/](skills/news/daily-horizon-news/) | 新闻分类下的 Hermes 技能和部署、排查笔记 |
 | [scripts/horizon_deliver_zh.py](scripts/horizon_deliver_zh.py) | 保存中文日报版本、通过 Hermes 发送到飞书，并记录发送结果 |
 | [scripts/horizon_edition.py](scripts/horizon_edition.py) | 归并同一事件、挑选代表报道，生成速览和完整 Markdown |
 | [deploy/systemd/](deploy/systemd/) | 生成日报的用户级 service 和 timer |
@@ -22,7 +22,9 @@ Horizon 主程序使用已核对的上游版本。[Thysrael/Horizon · `e17ea80`
 
 ## 在服务器上安装
 
-在运行 Hermes 的 Ubuntu 用户下执行，准备好 Git、Python 3.11 或更新版本、`uv` 和已启用的 Hermes 飞书通道。已有部署时，保留现有的 `~/Horizon` 和模型配置。升级前用 `hermes cron list` 找到原投递任务，记下任务 ID 和飞书会话，用 `hermes cron pause 任务ID` 暂停它。第 3 步会更新并恢复这个任务。
+在运行 Hermes 的 Ubuntu 用户下执行。已有日报、只需迁移技能目录时，直接执行第 2 步的第一段命令即可。
+
+部署整套日报需要 Git、Python 3.11 或更新版本、`uv` 和已启用的 Hermes 飞书通道。已有部署时，保留现有的 `~/Horizon` 和模型配置。升级日报程序前用 `hermes cron list` 找到原投递任务，记下任务 ID 和飞书会话，用 `hermes cron pause 任务ID` 暂停它。第 3 步会更新并恢复这个任务。
 
 ### 1. 准备 Horizon
 
@@ -40,14 +42,28 @@ install -m 600 config/horizon.example.json "$HOME/Horizon/data/config.json"
 
 示例采用智谱的 OpenAI 兼容接口。在服务器的 `~/Horizon/.env` 中设置 `ZHIPU_API_KEY` 并将文件权限设为 `600`。使用其他模型时，按对应服务调整示例里的 `ai` 配置。使用 Hermes 投递时，确保 `ai.languages` 含 `zh`，并将 `webhook.enabled` 设为 `false`。[Horizon 配置参考](https://github.com/Thysrael/Horizon/blob/e17ea80ced84e575e89489f3905b75eabf7e249b/docs/configuration.md)
 
+日报编辑默认沿用 Horizon 的 `ai.max_tokens`。使用示例中的 `glm-5.3-flash` 时，可在 `~/Horizon/.env` 中单独设置 `HORIZON_EDITION_MAX_TOKENS=8192`，给事件归并和一句话摘要留出足够的输出空间。
+
 ### 2. 安装 skill 和生成定时器
 
-在本仓库根目录执行。
+在本仓库根目录执行。技能默认安装到 `~/.hermes/skills/news/daily-horizon-news/`。如果以前装在 `productivity` 分类，下面的命令会在复制成功后将旧技能移出技能目录，备份中保留原有文件。
 
 ```bash
 horizon_hermes_home="${HERMES_HOME:-$HOME/.hermes}"
-mkdir -p "$horizon_hermes_home/skills/productivity" "$horizon_hermes_home/scripts"
-cp -R skills/self-hosted-briefings "$horizon_hermes_home/skills/productivity/"
+old_skill="$horizon_hermes_home/skills/productivity/self-hosted-briefings"
+mkdir -p "$horizon_hermes_home/skills/news" &&
+  cp -R skills/news/daily-horizon-news "$horizon_hermes_home/skills/news/" &&
+  if [ -e "$old_skill" ] || [ -L "$old_skill" ]; then
+    backup_dir=$(mktemp -d "$horizon_hermes_home/skill-backup.XXXXXX") &&
+      mv "$old_skill" "$backup_dir/" &&
+      echo "旧技能已备份到 $backup_dir/"
+  fi
+```
+
+安装或升级日报程序时，继续安装投递脚本和定时器。
+
+```bash
+mkdir -p "$horizon_hermes_home/scripts"
 install -m 755 scripts/horizon_deliver_zh.py "$horizon_hermes_home/scripts/"
 install -m 644 scripts/horizon_edition.py "$horizon_hermes_home/scripts/"
 
@@ -88,7 +104,7 @@ hermes cron edit 任务ID --deliver local
 hermes cron resume 任务ID
 ```
 
-切换飞书会话时，重新执行 `--configure`。下一次投递会将尚待发送的一期送到新目标。如果旧会话只收到过速览，新会话会收到速览和附件。若改用 Horizon 原生 webhook，请暂停 Hermes 投递任务、移除上面安装的 `hermes.conf`、执行 `systemctl --user daemon-reload`，再按技能笔记配置群机器人。[飞书 webhook 配置](skills/self-hosted-briefings/references/horizon.md#飞书机器人)
+切换飞书会话时，重新执行 `--configure`。下一次投递会将尚待发送的一期送到新目标。如果旧会话只收到过速览，新会话会收到速览和附件。若改用 Horizon 原生 webhook，请暂停 Hermes 投递任务、移除上面安装的 `hermes.conf`、执行 `systemctl --user daemon-reload`，再按技能笔记配置群机器人。[飞书 webhook 配置](skills/news/daily-horizon-news/references/horizon.md#飞书机器人)
 
 ## 查看运行状态
 
