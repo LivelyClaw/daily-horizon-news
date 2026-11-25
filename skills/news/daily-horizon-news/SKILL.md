@@ -59,8 +59,8 @@ AI key 没到位时也能测大半条链路：走 MCP 服务器调 `hz_fetch_ite
 
 按用户选定的渠道完成以下配置。填好真实密钥后，手动启动生成服务，在目标会话核对收到的中文日报。
 
-- **Horizon 飞书群机器人**。在 `webhook` 段设置 `enabled: true`、`url_env: HORIZON_WEBHOOK_URL`、`platform: feishu`、`layout: collapsible` 和 `languages: ["zh"]`，在 `.env` 填入同名 URL。切换渠道时暂停原 Hermes 投递任务并卸下其生成后入队配置。完整示例见 [飞书机器人](references/horizon.md#飞书机器人)。
-- **Hermes cron 投递**。将 `webhook.enabled` 设为 `false`。按安装说明配置飞书会话和 systemd 生成后入队步骤，复用或创建每 5 分钟运行的 `--no-agent` 任务，cron 结果目标为 `local`。确认 `horizon_deliver_zh.py` 和 `horizon_edition.py` 已安装在同一 Hermes scripts 目录。脚本复用 Horizon 模型合并同一事件，按评分、来源证据质量和影响力挑选代表报道。用 `hermes send` 发送涵盖全部入选事件的速览，每个事件用一句话概括并注明来源，再发送按相同顺序列出全部事件详情的 Markdown 附件。两步分别记录回执。
+- **签名 Webhook 和公开日报目录**。保持 Horizon 的 `webhook.enabled: false`，由 Hermes cron 使用 Horizon 虚拟环境运行投递脚本。运行 `--configure-webhook`，按安装说明从 Hermes 的 `.env` 读取应用凭据以及 `DAILY_HORIZON_NEWS_WEBHOOK_URL`、`DAILY_HORIZON_NEWS_WEBHOOK_SECRET`。每期独立导入「Horizon 中文日报」文件夹，标题以日期和早晚报开头。先确认文件夹及单篇链接均公开只读，再从签名 Webhook 推送全部带来源的一句话摘要和两个入口。
+- **旧版 Markdown 附件**。用户指定此渠道时，使用 `--configure feishu:会话ID` 配置 Hermes 应用机器人。
 
 ## Pitfalls
 
@@ -81,4 +81,4 @@ AI key 没到位时也能测大半条链路：走 MCP 服务器调 `hz_fetch_ite
 - [ ] 在 `data.fetch_report.sources` 核对预期启用的源。正常状态包括有内容的 `success` 和窗口内无更新的 `empty`。逐项处理 `partial_failure` 和 `failure`。
 - [ ] timer 下次触发时间 = 用户选的北京时间，Linger=yes，Persistent=true。
 - [ ] 已用服务日志核对抓取、模型处理或空窗口退出的实际结果。
-- [ ] 完整跑通一次：Hermes 渠道收到带来源的速览，能打开对应 Markdown 附件且最后一条保留完整详情。原生 webhook 渠道检查所配置的卡片。
+- [ ] 目标群收到签名 Webhook 速览，未登录的浏览器能打开当期全文和归档文件夹；事件数与文末内容完整。

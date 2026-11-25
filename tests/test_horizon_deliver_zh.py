@@ -191,6 +191,27 @@ class DeliveryTest(unittest.TestCase):
         self.assertEqual(self.file_bodies(), ["当前版本"])
         self.assertEqual(legacy.read_text(), marker)
 
+    def test_webhook_retry_reuses_saved_topics_and_full_document(self):
+        self.report("当期原稿")
+        self.configure()
+        edited = {"preview": "本期速览", "markdown": "本期全文", "topics": [{"name": "网络安全", "events": [
+            dict(number=1, before="", focus="事件重点", after="。", source="日报")]}]}
+        with closing(delivery.open_outbox(self.data)) as db:
+            with db:
+                db.execute("UPDATE settings SET target='webhook-docs'")
+            with patch.object(delivery, "prepare_edition", return_value=edited) as editor, \
+                 patch.object(delivery, "document_sender") as sender:
+                publish = sender.return_value.publish
+                publish.side_effect = [ValueError("稍后重试"), None]
+                with self.assertRaisesRegex(ValueError, "稍后重试"):
+                    delivery.send_one(db, self.data)
+                delivery.send_one(db, self.data)
+                editor.assert_called_once()
+                self.assertEqual(publish.call_count, 2)
+                self.assertEqual(publish.call_args_list[0], publish.call_args_list[1])
+                self.assertEqual(publish.call_args.args[5:7], ("本期速览", "本期全文"))
+                self.assertEqual(publish.call_args.kwargs["topics"], edited["topics"])
+
     def test_empty_body_and_missing_target(self):
         self.report("<details>参考</details>")
         self.run_script(ok=False)

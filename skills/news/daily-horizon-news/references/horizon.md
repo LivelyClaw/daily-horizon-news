@@ -7,7 +7,7 @@
 - 智谱示例使用 `provider: openai`、`base_url: https://open.bigmodel.cn/api/paas/v4`、`api_key_env: ZHIPU_API_KEY` 和模型 `glm-5.3-flash`。
 - 中文输出：`ai.languages: ["zh"]`。
 - 定时：北京 08:00 / 20:00 两期，`--hours 12` 窗口，`digest.max_items: 15`。
-- Hermes 飞书投递使用 `webhook.enabled: false`。同目录安装 `horizon_deliver_zh.py` 和 `horizon_edition.py`，分别负责投递和编辑。原生折叠卡片配置见下方「飞书机器人」。
+- Hermes 飞书投递使用 `webhook.enabled: false`。按仓库安装说明部署投递、编辑、文档归档和签名 Webhook 四个 Python 脚本。原生折叠卡片配置见下方「飞书机器人」。
 - 定时器：systemd 用户级 `horizon-daily.timer`。
 
 ## 配置坑表
@@ -65,6 +65,6 @@ PYTHON
 }
 ```
 
-- 安全设置选**自定义关键词**，填 `Horizon`——折叠卡片标题是 `Horizon {date} 折叠日报`，天然含该词。签名校验 Horizon 不支持；IP 白名单对无固定 IP 的本机不可用。
+- 安全设置选**自定义关键词**，填 `Horizon`——折叠卡片标题是 `Horizon {date} 折叠日报`，天然含该词。Horizon 原生发送器不支持签名，本仓库的签名 Webhook 使用独立投递脚本；IP 白名单对无固定 IP 的本机不可用。
 - 测试推送用 `horizon-webhook --dry-run` 预览。
 - CI 备选：仓库自带 `.github/workflows/daily-summary.yml.disabled` 模板（改 secrets + rename 启用），本机不常开时用它。
