@@ -12,7 +12,7 @@
 | [deploy/systemd/](deploy/systemd/) | 生成日报的用户级 service 和 timer |
 | [config/horizon.example.json](config/horizon.example.json) | 中文输出、公开科技资讯源和模型的示例配置 |
 
-Horizon 主程序使用已核对的上游版本。[Thysrael/Horizon · `e17ea80`](https://github.com/Thysrael/Horizon/tree/e17ea80ced84e575e89489f3905b75eabf7e249b)
+Horizon 主程序使用已核对的上游版本。[Thysrael/Horizon · `098375a`](https://github.com/Thysrael/Horizon/tree/098375a1f19ca26d3603df1e668bd97b34950763)
 
 ## 群里会收到什么
 
@@ -24,7 +24,7 @@ Horizon 主程序使用已核对的上游版本。[Thysrael/Horizon · `e17ea80`
 
 在运行 Hermes 的 Ubuntu 用户下执行。已有日报、只需迁移技能目录时，直接执行第 2 步的第一段命令即可。
 
-部署整套日报需要 Git、Python 3.11 或更新版本、`uv` 、Hermes 定时任务和飞书自建应用。已有部署时，保留现有的 `~/Horizon` 和模型配置。升级日报程序前用 `hermes cron list` 找到原投递任务，记下任务 ID 和飞书会话，用 `hermes cron pause 任务ID` 暂停它。第 3 步会更新并恢复这个任务。
+部署整套日报需要 Git、Python 3.11.5 或更新版本、`uv` 、Hermes 定时任务和飞书自建应用。已有部署时，保留现有的 `~/Horizon` 和模型配置。升级日报程序前用 `hermes cron list` 找到原投递任务，记下任务 ID 和飞书会话，用 `hermes cron pause 任务ID` 暂停它。第 3 步会更新并恢复这个任务。
 
 ### 1. 准备 Horizon
 
@@ -35,12 +35,12 @@ git clone https://github.com/LivelyClaw/daily-horizon-news.git
 cd daily-horizon-news
 
 git clone https://github.com/Thysrael/Horizon.git "$HOME/Horizon"
-git -C "$HOME/Horizon" checkout --detach e17ea80ced84e575e89489f3905b75eabf7e249b
+git -C "$HOME/Horizon" checkout --detach 098375a1f19ca26d3603df1e668bd97b34950763
 (cd "$HOME/Horizon" && uv sync --locked)
 install -m 600 config/horizon.example.json "$HOME/Horizon/data/config.json"
 ```
 
-示例采用智谱的 OpenAI 兼容接口。在服务器的 `~/Horizon/.env` 中设置 `ZHIPU_API_KEY` 并将文件权限设为 `600`。使用其他模型时，按对应服务调整示例里的 `ai` 配置。使用 Hermes 投递时，确保 `ai.languages` 含 `zh`，并将 `webhook.enabled` 设为 `false`。[Horizon 配置参考](https://github.com/Thysrael/Horizon/blob/e17ea80ced84e575e89489f3905b75eabf7e249b/docs/configuration.md)
+示例采用智谱的 OpenAI 兼容接口。在服务器的 `~/Horizon/.env` 中设置 `ZHIPU_API_KEY` 并将文件权限设为 `600`。使用其他模型时，按对应服务调整示例里的 `ai` 配置。使用 Hermes 投递时，确保 `ai.languages` 含 `zh`，并将 `webhook.enabled` 设为 `false`。[Horizon 配置参考](https://github.com/Thysrael/Horizon/blob/098375a1f19ca26d3603df1e668bd97b34950763/docs/configuration.md)
 
 日报编辑默认沿用 Horizon 的 `ai.max_tokens`。使用示例中的 `glm-5.3-flash` 时，可在 `~/Horizon/.env` 中单独设置 `HORIZON_EDITION_MAX_TOKENS=8192`，给事件归并和一句话摘要留出足够的输出空间。
 
