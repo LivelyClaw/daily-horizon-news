@@ -193,7 +193,7 @@ def topic_cards(title, topics, url, folder_url):
                 elements.append({"tag": "hr"})
             heading = f"**{name.translate(MD_LITERAL)}**  <font color='grey'>{counts[name]} 条</font>"
             lines = [heading, *(line for _, line in members)]
-            elements.append({"tag": "markdown", "content": "\n\n".join(lines)})
+            elements.append({"tag": "markdown", "content": "\n".join(lines)})
         return elements
 
     pages, page = [], []

@@ -67,7 +67,7 @@ class PublicationTest(unittest.TestCase):
             self.assertLessEqual(len(FeishuWebhook("unused", "test").signed_body(page, 1599360473)), MAX_BODY_BYTES)
             elements = page["card"]["elements"]
             self.assertEqual(elements[-1]["tag"] == "action", i == len(pages))
-            lines = elements[1]["content"].split("\n\n")
+            lines = elements[1]["content"].splitlines()
             self.assertIn("**开发者观察**", lines[0])
             for line in lines[1:]:
                 number = next(expected)
