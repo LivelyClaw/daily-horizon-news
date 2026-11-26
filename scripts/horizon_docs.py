@@ -10,8 +10,10 @@ import httpx
 from dotenv import dotenv_values
 
 if __package__:
+    from .horizon_timing import timed
     from .horizon_webhook import FeishuWebhook
 else:
+    from horizon_timing import timed
     from horizon_webhook import FeishuWebhook
 
 
@@ -261,13 +263,14 @@ def publish(db, data_dir, row_id, day, digest, preview, markdown, env_file, *, t
     temp = dest.with_suffix(".tmp")
     temp.write_text(markdown, encoding="utf-8")
     temp.replace(dest)
-    drive = Drive(env_file)
-    try:
-        drive.public_read(folder, "folder")
-        token, url = import_document(db, drive, folder, row_id, title, markdown)
-        drive.public_read(token)
-    finally:
-        drive.http.close()
+    with timed("document", f"edition={row_id}"):
+        drive = Drive(env_file)
+        try:
+            drive.public_read(folder, "folder")
+            token, url = import_document(db, drive, folder, row_id, title, markdown)
+            drive.public_read(token)
+        finally:
+            drive.http.close()
     route = hashlib.sha256(hook.url.encode()).hexdigest()
     with db:
         db.execute("UPDATE publications SET route=?,next_page=0 WHERE edition=? AND route IS NOT ?",
@@ -277,7 +280,8 @@ def publish(db, data_dir, row_id, day, digest, preview, markdown, env_file, *, t
     for index, page in enumerate(cards(title, preview, url, folder_url, topics=topics)):
         if index < start:
             continue
-        hook.send(page)
+        with timed("webhook", f"edition={row_id} page={index+1}"):
+            hook.send(page)
         with db:
             db.execute("UPDATE publications SET next_page=? WHERE edition=?", (index+1, row_id))
     with db:

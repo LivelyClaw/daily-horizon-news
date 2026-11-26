@@ -65,7 +65,7 @@ mkdir -p "$horizon_hermes_home/skills/news" &&
 ```bash
 mkdir -p "$horizon_hermes_home/scripts"
 install -m 755 scripts/horizon_deliver_zh.py "$horizon_hermes_home/scripts/"
-install -m 644 scripts/horizon_edition.py scripts/horizon_docs.py scripts/horizon_webhook.py "$horizon_hermes_home/scripts/"
+install -m 644 scripts/horizon_edition.py scripts/horizon_docs.py scripts/horizon_webhook.py scripts/horizon_timing.py "$horizon_hermes_home/scripts/"
 
 install -Dm644 deploy/systemd/horizon-daily.service "$HOME/.config/systemd/user/horizon-daily.service"
 install -Dm644 deploy/systemd/horizon-daily.timer "$HOME/.config/systemd/user/horizon-daily.timer"
@@ -86,6 +86,7 @@ install -Dm644 deploy/systemd/horizon-daily.timer "$HOME/.config/systemd/user/ho
 "$HOME/Horizon/.venv/bin/python" "$horizon_hermes_home/scripts/horizon_deliver_zh.py" --configure-webhook
 mkdir -p "$HOME/.local/libexec"
 ln -sfn "$horizon_hermes_home/scripts/horizon_deliver_zh.py" "$HOME/.local/libexec/horizon_deliver_zh.py"
+ln -sfn "$horizon_hermes_home/scripts/horizon_timing.py" "$HOME/.local/libexec/horizon_timing.py"
 install -Dm644 deploy/systemd/horizon-daily.service.d/hermes.conf "$HOME/.config/systemd/user/horizon-daily.service.d/hermes.conf"
 systemctl --user daemon-reload
 systemctl --user enable --now horizon-daily.timer
@@ -114,6 +115,7 @@ hermes cron resume 任务ID
 ## 查看运行状态
 
 - 用 `systemctl --user list-timers horizon-daily.timer` 查看下一次生成时间，用 `journalctl --user -u horizon-daily.service -n 50` 查看生成及保存待发正文的结果。
+- 用 `journalctl --user --since today -g '^horizon_timing '` 查看生成、编辑、文档导入和群推送的起止与耗时（秒）。`details` 是整批详情的实际耗时，`detail_research` 和 `detail_write` 分别记录单条资料查询和正文撰写。多条并行时，单条耗时不能直接相加作为整批耗时。
 - Horizon 的原始日报在 `~/Horizon/data/summaries/horizon-YYYY-MM-DD-zh.md`，文件日期使用 UTC。同一天的第二期会更新同一个文件。手动连续生成多期时，每次生成结束后也要执行一次 `"$horizon_hermes_home/scripts/horizon_deliver_zh.py" --enqueue-only`，保留即将被覆盖的版本。
 - 用 `hermes cron runs 任务ID` 查看执行记录。SQLite 会保存导入任务、文档链接和已确认的卡片页数。Webhook 失败后复用该篇文档，从未确认页续发。若飞书已收件但回执丢失，该页重试可能重复送达。
 - 用以下查询查看最近五期的状态及云文档链接。

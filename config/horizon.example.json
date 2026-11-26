@@ -3,6 +3,7 @@
     "provider": "openai",
     "base_url": "https://open.bigmodel.cn/api/paas/v4",
     "model": "glm-5.3-flash",
+    "enrichment_concurrency": 2,
     "api_key_env": "ZHIPU_API_KEY",
     "languages": ["zh"]
   },

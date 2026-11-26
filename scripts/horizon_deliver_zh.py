@@ -15,6 +15,15 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+if __package__:
+    from .horizon_timing import timed
+else:
+    # Hermes 运行脚本时可能未将脚本所在目录加入导入路径。
+    directory = str(Path(__file__).resolve().parent)
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+    from horizon_timing import timed
+
 DATA_DIR = Path.home() / "Horizon" / "data"
 
 
@@ -64,11 +73,6 @@ def document_sender():
     if __package__:
         from . import horizon_docs
     else:
-        from pathlib import Path
-        # systemd 可从符号链接启动脚本；Hermes 也可以不将脚本目录加入导入路径。
-        directory = str(Path(__file__).resolve().parent)
-        if directory not in sys.path:
-            sys.path.insert(0, directory)
         import horizon_docs
     return horizon_docs
 
@@ -188,7 +192,8 @@ def send_one(db: sqlite3.Connection, data_dir: Path) -> None:
             if raw is not None and hashlib.sha256(raw).digest() == digest:
                 body = raw.decode("utf-8")
         if phase in {"legacy", "raw"}:
-            edited = prepare_edition(data_dir, day, body)
+            with timed("edit", f"edition={row_id}"):
+                edited = prepare_edition(data_dir, day, body)
             body, attachment = edited["preview"], edited["markdown"]
             topics_json = json.dumps(edited.get("topics", []), ensure_ascii=False)
             with db:
